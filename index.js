@@ -12,6 +12,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 app.use(bodyParser.json());
 
+// 🔥 修复：加根路径，解决 Cannot GET /
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // 数据库
 const DB_FILE = path.join(__dirname, 'db.json');
 const POOL_FILE = path.join(__dirname, 'pool.json');
