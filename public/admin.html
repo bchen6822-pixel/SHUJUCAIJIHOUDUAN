@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f7f7f7;}
+.box{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+h2{margin-top:0;font-size:18px;}
+input,textarea,button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #ddd;margin-bottom:10px;box-sizing:border-box;}
+button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer;}
+.gray{background:#6b7280;}
+.red{background:#ef4444;}
+
+.table{width:100%;border-collapse:collapse;margin-top:10px;}
+.table th,.table td{padding:8px;text-align:left;font-size:14px;border-bottom:1px solid #eee;}
+.table th{background:#f9fafb;}
+.search{margin-bottom:10px;}
+.form-row{display:flex;gap:8px;}
+.form-row input{flex:1;margin:0;}
+.online{color:#10b985;font-weight:bold;}
+.offline{color:#999;}
+.act-yes{color:#10b985;}
+.act-no{color:#999;}
+
+.copy-btn{
+  background: #3b82f6;
+  color: #fff;
+  border:none;
+  border-radius:4px;
+  padding:4px 8px;
+  font-size:12px;
+  cursor:pointer;
+  margin:2px;
+}
+.reset-btn{background:#f59e0b;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin:2px;}
+.kick-btn{background:#8b5cf6;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin:2px;}
+
+/* 顶部小按钮栏 */
+.top-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.small-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  width: auto;
+}
+/* 按钮颜色 */
+.btn-green { background: #10b985; }
+.btn-blue  { background: #3b82f6; }
+.btn-gray  { background: #6b7280; }
+
+/* 弹窗 */
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.modal.show {
+  display: flex;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  width: 90%;
+  max-width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* 接口池状态颜色 */
+.status-normal{color:#10b985;font-weight:bold;}
+.status-timeout{color:#f59e0b;font-weight:bold;}
+.status-banned{color:#ef4444;font-weight:bold;}
+.status-unknown{color:#999;}
+.working-yes{color:#3b82f6;font-weight:bold;}
+.working-no{color:#999;font-weight:bold;}
+</style>
+</head>
+
+<body>
+
+<div class="box" id="loginBox">
+  <h2>管理员登录</h2>
+  <input id="admin_user" placeholder="管理员账号">
+  <input id="admin_pwd" type="password" placeholder="管理员密码">
+  <button onclick="adminLogin()">登录</button>
+</div>
+
+<div id="adminPanel" style="display:none;">
+
+  <!-- 顺序：单个添加 / 批量添加 / 设置有效期 / 修改管理员 / 退出 -->
+  <div class="top-bar">
+    <button class="small-btn btn-green" onclick="showModalAdd()">单个添加用户</button>
+    <button class="small-btn btn-green" onclick="showModalBatch()">批量添加用户</button>
+    <button class="small-btn btn-blue" onclick="showModalExpire()">设置有效期</button>
+    <button class="small-btn btn-blue" onclick="showModalAdmin()">修改管理员</button>
+    <button class="small-btn btn-gray" onclick="adminLogout()">退出登录</button>
+  </div>
+
+  <!-- ====================== 弹窗1：修改管理员 ====================== -->
+  <div class="modal" id="modalAdmin">
+    <div class="modal-box">
+      <h3>修改管理员账号密码</h3>
+      <input id="new_admin_user" placeholder="新管理员账号（不改留空）">
+      <input id="new_admin_pwd" type="password" placeholder="新管理员密码（不改留空）">
+      <button onclick="updateAdminUserPwd()">保存</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+  <!-- ====================== 弹窗2：单个添加用户 ====================== -->
+  <div class="modal" id="modalAdd">
+    <div class="modal-box">
+      <h3>单个添加用户</h3>
+      <input id="singleUser" placeholder="用户名">
+      <input id="singlePwd" placeholder="密码">
+      <input id="singleExpireDays" type="number" placeholder="有效天数（0=永久）" value="0">
+      <button onclick="addSingleUser()">添加用户</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+  <!-- ====================== 弹窗3：批量添加用户 ====================== -->
+  <div class="modal" id="modalBatch">
+    <div class="modal-box">
+      <h3>批量添加用户</h3>
+      <textarea rows="8" id="batchLines" placeholder="一行一个：账号 密码"></textarea>
+      <input id="expireDays" type="number" placeholder="有效天数（0=永久）" value="0">
+      <button onclick="batchAdd()">批量导入</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+  <!-- ====================== 弹窗4：设置用户有效期 ====================== -->
+  <div class="modal" id="modalExpire">
+    <div class="modal-box">
+      <h3>设置用户有效期</h3>
+      <input id="editUser" placeholder="要修改的用户名">
+      <input id="editDays" type="number" placeholder="新增有效天数">
+      <button onclick="editUserExpire()">设置到期时间</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+  <!-- ====================== 用户列表 ====================== -->
+  <div class="box">
+    <h2>账号列表</h2>
+    <input class="search" id="search" placeholder="搜索用户名" oninput="renderList()">
+    <div id="listWrap"></div>
+  </div>
+
+
+  <!-- ====================== 新增：TikTok接口轮换池管理 ====================== -->
+  <div class="box">
+    <h2>TikTok抓取接口池管理</h2>
+    <div class="top-bar">
+      <button class="small-btn btn-green" onclick="showAddPoolModal()">新增接口节点</button>
+      <button class="small-btn btn-blue" onclick="testAllPool()">一键批量检测</button>
+      <button class="small-btn btn-gray" id="autoCheckBtn" onclick="switchAutoCheck()">开启定时自动检测</button>
+    </div>
+    <div id="poolListWrap"></div>
+  </div>
+
+  <!-- 接口池新增/编辑弹窗 -->
+  <div class="modal" id="poolModal">
+    <div class="modal-box">
+      <h3 id="poolModalTitle">新增抓取接口</h3>
+      <input id="poolApiUrl" placeholder="接口地址 例如：https://xxx.onrender.com">
+      <input id="poolRemark" placeholder="备注（随意填写）">
+      <input type="hidden" id="poolEditId">
+      <button onclick="savePoolItem()">保存</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let all = [];
+let autoRefreshTimer;
+let poolList = [];
+let autoCheckOn = false;
+
+// 【这里是你的专属后端根地址，已经帮你写死】
+const BASE_API = "https://tiktok-data-acquisitio.onrender.com";
+
+// 打开/关闭所有弹窗
+function showModalAdmin() { hideAllModal(); document.getElementById('modalAdmin').classList.add('show'); }
+function showModalAdd()   { hideAllModal(); document.getElementById('modalAdd').classList.add('show'); }
+function showModalBatch() { hideAllModal(); document.getElementById('modalBatch').classList.add('show'); }
+function showModalExpire(){ hideAllModal(); document.getElementById('modalExpire').classList.add('show'); }
+function hideAllModal() {
+  document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+}
+
+// 自动登录
+window.onload = function(){
+  const t = localStorage.getItem('admin_token');
+  if(t){
+    document.getElementById('loginBox').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    startAutoRefresh();
+    loadPoolList();
+  }
+}
+
+// 登录
+async function adminLogin() {
+  const user = document.getElementById('admin_user').value;
+  const pwd = document.getElementById('admin_pwd').value;
+  try {
+    const r = await fetch(BASE_API + '/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user, pwd })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      localStorage.setItem('admin_token', 'ok');
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('adminPanel').style.display = 'block';
+      startAutoRefresh();
+      loadPoolList();
+    } else {
+      alert('登录失败');
+    }
+  } catch(e) { alert('网络错误'); }
+}
+
+// 退出
+function adminLogout() {
+  localStorage.removeItem('admin_token');
+  clearInterval(autoRefreshTimer);
+  hideAllModal();
+  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('adminPanel').style.display = 'none';
+}
+
+// 修改管理员
+async function updateAdminUserPwd() {
+  const newUser = document.getElementById('new_admin_user').value.trim();
+  const newPwd = document.getElementById('new_admin_pwd').value.trim();
+  if(!newUser && !newPwd) { alert('请输入账号或密码'); return; }
+  try {
+    const res = await fetch(BASE_API + '/api/admin/set-user-pwd', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newUser, newPwd })
+    });
+    const d = await res.json();
+    if(d.ok) {
+      alert('修改成功！');
+      hideAllModal();
+    } else {
+      alert('失败：'+(d.msg||''));
+    }
+  } catch(e) { alert('网络错误'); }
+}
+
+// 设置用户有效期
+async function editUserExpire() {
+  const user = document.getElementById('editUser').value.trim();
+  const days = document.getElementById('editDays').value.trim();
+  if(!user || !days || isNaN(days) || days<0) { alert('请正确填写'); return; }
+  try {
+    const res = await fetch(BASE_API + '/api/admin/set-expire', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username:user, days:Number(days) })
+    });
+    const d = await res.json();
+    if(d.ok) {
+      alert('设置成功！');
+      hideAllModal();
+      loadList();
+    } else {
+      alert('失败：'+(d.msg||''));
+    }
+  } catch(e) { alert('网络错误'); }
+}
+
+// 新增：重置换绑次数
+async function resetDeviceTimes(username){
+  if(!confirm('确定重置该用户换绑次数为1次？')) return;
+  try{
+    const res = await fetch(BASE_API + '/api/admin/reset-device-times',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    const d = await res.json();
+    if(d.ok){
+      alert('重置成功');
+      loadList();
+    }else{
+      alert('重置失败');
+    }
+  }catch(e){alert('网络错误');}
+}
+
+// 新增：强制下线
+async function forceLogout(username){
+  if(!confirm('确定强制该用户下线？')) return;
+  try{
+    const res = await fetch(BASE_API + '/api/admin/force-logout',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    const d = await res.json();
+    if(d.ok){
+      alert('已强制下线');
+      loadList();
+    }
+  }catch(e){alert('网络错误');}
+}
+
+// 单个添加
+async function addSingleUser() {
+  const user = document.getElementById('singleUser').value.trim();
+  const pwd = document.getElementById('singlePwd').value.trim();
+  const days = Number(document.getElementById('singleExpireDays').value)||0;
+  if(!user||!pwd) { alert('请填写账号密码'); return; }
+  try {
+    const r = await fetch(BASE_API + '/api/admin/batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: user+' '+pwd, days })
+    });
+    const d = await r.json();
+    alert('添加成功');
+    hideAllModal();
+    loadList();
+  } catch(e) { alert('网络错误'); }
+}
+
+// 批量添加
+async function batchAdd() {
+  const lines = document.getElementById('batchLines').value.trim();
+  const days = Number(document.getElementById('expireDays').value)||0;
+  if(!lines) { alert('请输入内容'); return; }
+  try {
+    const res = await fetch(BASE_API + '/api/admin/batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines, days })
+    });
+    const d = await res.json();
+    alert(`成功：${d.success} 个`);
+    hideAllModal();
+    loadList();
+  } catch(e) { alert('网络错误'); }
+}
+
+// 复制账号密码
+function copyUser(username, password){
+  const text = `账号：${username}，密码：${password}`;
+  const i = document.createElement('input');
+  i.value = text; document.body.appendChild(i);
+  i.select(); document.execCommand('copy');
+  i.remove();
+  alert('已复制');
+}
+
+// 列表
+async function loadList() {
+  try {
+    const r = await fetch(BASE_API + '/api/admin/list');
+    all = await r.json();
+    renderList();
+  } catch(e) {}
+}
+
+function renderList() {
+  const kw = document.getElementById('search').value.toLowerCase();
+  const f = all.filter(x => x.username.toLowerCase().includes(kw));
+  let html = `<table class="table">
+  <tr>
+    <th>账号</th><th>密码</th><th>在线</th><th>激活状态</th><th>剩余换绑</th><th>创建时间</th><th>到期时间</th><th>状态</th><th>操作</th>
+  </tr>`;
+  for(const u of f){
+    const on = u.token ? '在线' : '离线';
+    const cn = u.token ? 'online' : 'offline';
+    
+    let exp = "";
+    if(u.activeTime){
+      exp = u.expireAt ? new Date(u.expireAt).toLocaleString() : '永久';
+    }else{
+      exp = u.displayExpire || (u.days ? u.days+"天" : "永久");
+    }
+
+    const activeTxt = u.activeTime ? '<span class="act-yes">已激活</span>' : '<span class="act-no">未激活</span>';
+    const resetTimes = u.changeDeviceTimes ?? 1;
+
+    html += `<tr>
+      <td>${u.username}</td>
+      <td>${u.password}</td>
+      <td class="${cn}">${on}</td>
+      <td>${activeTxt}</td>
+      <td>${resetTimes}次</td>
+      <td>${new Date(u.createdAt).toLocaleString()}</td>
+      <td>${exp}</td>
+      <td>${u.enabled?'启用':'禁用'}</td>
+      <td>
+        <button class="copy-btn" onclick="copyUser('${u.username}','${u.password}')">复制</button>
+        <button style="padding:4px;font-size:12px" onclick="toggle('${u.username}',${!u.enabled})">
+          ${u.enabled?'禁用':'启用'}
+        </button>
+        <button class="reset-btn" onclick="resetDeviceTimes('${u.username}')">重置换绑</button>
+        <button class="kick-btn" onclick="forceLogout('${u.username}')">强制下线</button>
+        <button class="red" style="padding:4px;font-size:12px" onclick="del('${u.username}')">删除</button>
+      </td>
+    </tr>`;
+  }
+  html += '</table>';
+  document.getElementById('listWrap').innerHTML = html;
+}
+
+function startAutoRefresh() {
+  loadList();
+  clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(loadList, 5000);
+}
+
+async function toggle(user, enabled) {
+  await fetch(BASE_API + '/api/admin/toggle', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username:user, enabled })
+  });
+  loadList();
+}
+
+async function del(user) {
+  if(!confirm('确定删除？')) return;
+  await fetch(BASE_API + '/api/admin/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username:user })
+  });
+  loadList();
+}
+
+
+// ====================== 接口池管理JS函数 新增开始 ======================
+async function loadPoolList(){
+  try{
+    let res = await fetch(BASE_API+'/api/admin/pool-list');
+    poolList = await res.json();
+    renderPoolList();
+  }catch(e){}
+}
+
+function showAddPoolModal(){
+  hideAllModal();
+  document.getElementById('poolModalTitle').innerText = '新增抓取接口';
+  document.getElementById('poolApiUrl').value = '';
+  document.getElementById('poolRemark').value = '';
+  document.getElementById('poolEditId').value = '';
+  document.getElementById('poolModal').classList.add('show');
+}
+
+function showEditPoolModal(item){
+  hideAllModal();
+  document.getElementById('poolModalTitle').innerText = '编辑接口';
+  document.getElementById('poolApiUrl').value = item.apiUrl;
+  document.getElementById('poolRemark').value = item.remark;
+  document.getElementById('poolEditId').value = item.id;
+  document.getElementById('poolModal').classList.add('show');
+}
+
+async function savePoolItem(){
+  let id = document.getElementById('poolEditId').value;
+  let apiUrl = document.getElementById('poolApiUrl').value.trim();
+  let remark = document.getElementById('poolRemark').value.trim();
+  if(!apiUrl){alert('请填写接口地址');return;}
+  try{
+    await fetch(BASE_API+'/api/admin/pool-save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id?Number(id):null,apiUrl,remark})
+    });
+    hideAllModal();
+    loadPoolList();
+  }catch(e){alert('保存失败');}
+}
+
+async function delPoolItem(id){
+  if(!confirm('确定删除该节点？'))return;
+  try{
+    await fetch(BASE_API+'/api/admin/pool-del',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id})
+    });
+    loadPoolList();
+  }catch(e){}
+}
+
+async function testSinglePool(apiUrl){
+  try{
+    let res = await fetch(BASE_API+'/api/admin/pool-test-one',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({apiUrl})
+    });
+    let d = await res.json();
+    loadPoolList();
+    if(d.status==='normal') alert('检测通过：正常可用');
+    else if(d.status==='timeout') alert('检测结果：超时');
+    else alert('检测结果：已封禁');
+  }catch(e){alert('检测请求失败');}
+}
+
+async function testAllPool(){
+  if(!confirm('确定批量检测所有节点？'))return;
+  try{
+    await fetch(BASE_API+'/api/admin/pool-test-all',{method:'POST'});
+    alert('批量检测完成');
+    loadPoolList();
+  }catch(e){alert('批量检测失败');}
+}
+
+async function switchAutoCheck(){
+  autoCheckOn = !autoCheckOn;
+  try{
+    await fetch(BASE_API+'/api/admin/set-auto-check',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({open:autoCheckOn})
+    });
+    let btn = document.getElementById('autoCheckBtn');
+    if(autoCheckOn){
+      btn.innerText = '关闭定时自动检测';
+      btn.style.background = '#ef4444';
+      alert('已开启：每60分钟自动检测一次IP状态');
+    }else{
+      btn.innerText = '开启定时自动检测';
+      btn.style.background = '#6b7280';
+      alert('已关闭自动检测');
+    }
+  }catch(e){alert('操作失败');}
+}
+
+function renderPoolList(){
+  let html = `<table class="table">
+    <tr>
+      <th>接口地址</th>
+      <th>备注</th>
+      <th>状态</th>
+      <th>今日调用</th>
+      <th>累计调用</th>
+      <th>工作状态</th>
+      <th>最后检测时间</th>
+      <th>操作</th>
+    </tr>`;
+  if(poolList.length===0){
+    html += '<tr><td colspan="8" style="text-align:center;color:#999;">暂无接口节点，请新增</td></tr>';
+  }
+  for(let item of poolList){
+    let statusText = '';
+    let statusClass = '';
+    if(item.status==='normal'){statusText='正常';statusClass='status-normal';}
+    else if(item.status==='timeout'){statusText='超时';statusClass='status-timeout';}
+    else if(item.status==='banned'){statusText='已封禁';statusClass='status-banned';}
+    else{statusText='未检测';statusClass='status-unknown';}
+
+    let workText = item.isWorking ? '抓取中' : '空闲';
+    let workClass = item.isWorking ? 'working-yes' : 'working-no';
+
+    html += `<tr>
+      <td style="word-break:break-all">${item.apiUrl}</td>
+      <td>${item.remark||'-'}</td>
+      <td class="${statusClass}">${statusText}</td>
+      <td>${item.todayCount||0}</td>
+      <td>${item.totalCount||0}</td>
+      <td class="${workClass}">${workText}</td>
+      <td>${item.lastTestTime?new Date(item.lastTestTime).toLocaleString():'-'}</td>
+      <td>
+        <button class="copy-btn" onclick="testSinglePool('${item.apiUrl}')">检测</button>
+        <button class="reset-btn" onclick="showEditPoolModal(${JSON.stringify(item).replace(/"/g,'&quot;')})">编辑</button>
+        <button class="red" style="padding:4px;font-size:12px" onclick="delPoolItem(${item.id})">删除</button>
+      </td>
+    </tr>`;
+  }
+  html += '</table>';
+  document.getElementById('poolListWrap').innerHTML = html;
+}
+// ====================== 接口池管理JS函数 新增结束 ======================
+
+</script>
+</body>
+</html>
