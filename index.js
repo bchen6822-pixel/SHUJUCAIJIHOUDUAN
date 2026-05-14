@@ -483,18 +483,5 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
   }
 });
 
-// 保活
-const keepAliveList = [
-  "https://wwwwwwwwwwwvvvvvvwwwwwwvvvvvwwwwvvww.onrender.com/",
-  "https://shujucaijihouduan.onrender.com/",
-  "https://tiktok-frontend-api-production.up.railway.app" // 新增这行
-];
-
-setInterval(() => {
-  keepAliveList.forEach(url => {
-    https.get(url).on('error', () => {});
-  });
-}, 10 * 60 * 1000);
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('✅ 服务运行正常'));
