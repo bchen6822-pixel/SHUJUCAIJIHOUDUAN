@@ -37,7 +37,7 @@ let admin = {
 
 // 全局浏览器伪装请求头
 const browserHeaders = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,Chrome/135.0.0.0 Safari/537.36',
   'Referer': 'https://www.tiktok.com/',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9'
@@ -167,7 +167,6 @@ app.post('/api/check-auth', (req, res) => {
   return res.json({ code: 0, msg: '验证通过' });
 });
 
-// 重置换绑次数为 1
 app.post('/api/admin/reset-device-times', (req, res) => {
   const { username } = req.body;
   const db = readDB();
@@ -178,7 +177,7 @@ app.post('/api/admin/reset-device-times', (req, res) => {
   res.json({ ok:true });
 });
 
-// ✅ 新增：自定义设置换绑次数
+// 新增自定义设置换绑次数接口
 app.post('/api/admin/set-device-times', (req, res) => {
   const { username, times } = req.body;
   const db = readDB();
@@ -452,7 +451,7 @@ app.post('/api/admin/set-auto-check',(req,res)=>{
   res.json({ok:true});
 });
 
-// 轮换接口 + 统计今日/累计调用 + 工作状态（修复第三方不计数、状态不同步）
+// 轮换接口 + 统计今日/累计调用 + 工作状态
 app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
@@ -467,7 +466,7 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
   let randomNode = avail[Math.floor(Math.random()*avail.length)];
   let idx = list.findIndex(x=>x.id === randomNode.id);
 
-  // 标记工作中 + 计数（立刻写入，第三方也生效）
+  // 标记工作中 + 计数
   if(idx > -1){
     list[idx].isWorking = true;
     list[idx].todayCount += 1;
