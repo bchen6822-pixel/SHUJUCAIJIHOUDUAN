@@ -12,7 +12,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // 你的数据库已经填好！
-const MONGODB_URI = "mongodb+srv://bchen6822_db_user:123456@cluster0.0peovwc.mongodb.net/?appName=Cluster0";
+const MONGODB_URI = "mongodb+srv://bchen6822_db_user:OSmT19fe4MN6WifO@cluster0.0peovwc.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGODB_URI)
 .then(()=>console.log("✅ 云端数据库连接成功，数据永不丢失"))
