@@ -57,6 +57,7 @@ button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer
 .btn-green { background: #10b985; }
 .btn-blue  { background: #3b82f6; }
 .btn-gray  { background: #6b7280; }
+.btn-orange { background: #f97316; }
 
 /* 弹窗 */
 .modal {
@@ -102,11 +103,12 @@ button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer
 
 <div id="adminPanel" style="display:none;">
 
-  <!-- 顺序：单个添加 / 批量添加 / 设置有效期 / 修改管理员 / 退出 -->
+  <!-- 顺序：单个添加 / 批量添加 / 设置有效期 / 修改换绑次数 / 修改管理员 / 退出 -->
   <div class="top-bar">
     <button class="small-btn btn-green" onclick="showModalAdd()">单个添加用户</button>
     <button class="small-btn btn-green" onclick="showModalBatch()">批量添加用户</button>
     <button class="small-btn btn-blue" onclick="showModalExpire()">设置有效期</button>
+    <button class="small-btn btn-orange" onclick="showModalSetDeviceTimes()">设置换绑次数</button>
     <button class="small-btn btn-blue" onclick="showModalAdmin()">修改管理员</button>
     <button class="small-btn btn-gray" onclick="adminLogout()">退出登录</button>
   </div>
@@ -152,6 +154,17 @@ button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer
       <input id="editUser" placeholder="要修改的用户名">
       <input id="editDays" type="number" placeholder="新增有效天数">
       <button onclick="editUserExpire()">设置到期时间</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
+  <!-- ====================== 弹窗5：设置换绑次数 ====================== -->
+  <div class="modal" id="modalSetDeviceTimes">
+    <div class="modal-box">
+      <h3>设置换绑次数</h3>
+      <input id="deviceUser" placeholder="用户名">
+      <input id="deviceTimes" type="number" placeholder="请输入换绑次数">
+      <button onclick="setDeviceTimes()">保存</button>
       <button class="gray" onclick="hideAllModal()">取消</button>
     </div>
   </div>
@@ -203,6 +216,7 @@ function showModalAdmin() { hideAllModal(); document.getElementById('modalAdmin'
 function showModalAdd()   { hideAllModal(); document.getElementById('modalAdd').classList.add('show'); }
 function showModalBatch() { hideAllModal(); document.getElementById('modalBatch').classList.add('show'); }
 function showModalExpire(){ hideAllModal(); document.getElementById('modalExpire').classList.add('show'); }
+function showModalSetDeviceTimes(){ hideAllModal(); document.getElementById('modalSetDeviceTimes').classList.add('show'); }
 function hideAllModal() {
   document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
 }
@@ -290,7 +304,7 @@ async function editUserExpire() {
   } catch(e) { alert('网络错误'); }
 }
 
-// 新增：重置换绑次数
+// 重置换绑次数为1
 async function resetDeviceTimes(username){
   if(!confirm('确定重置该用户换绑次数为1次？')) return;
   try{
@@ -309,7 +323,34 @@ async function resetDeviceTimes(username){
   }catch(e){alert('网络错误');}
 }
 
-// 新增：强制下线
+// ✅ 新增：自定义设置换绑次数
+async function setDeviceTimes(){
+  const username = document.getElementById('deviceUser').value.trim();
+  const times = document.getElementById('deviceTimes').value.trim();
+  if(!username || !times || isNaN(times)){
+    alert('请正确填写');
+    return;
+  }
+  try{
+    const res = await fetch(BASE_API + '/api/admin/set-device-times',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username, times})
+    });
+    const d = await res.json();
+    if(d.ok){
+      alert('设置成功！');
+      hideAllModal();
+      loadList();
+    }else{
+      alert('失败：'+(d.msg||''));
+    }
+  }catch(e){
+    alert('网络错误');
+  }
+}
+
+// 强制下线
 async function forceLogout(username){
   if(!confirm('确定强制该用户下线？')) return;
   try{
@@ -321,280 +362,3 @@ async function forceLogout(username){
     const d = await res.json();
     if(d.ok){
       alert('已强制下线');
-      loadList();
-    }
-  }catch(e){alert('网络错误');}
-}
-
-// 单个添加
-async function addSingleUser() {
-  const user = document.getElementById('singleUser').value.trim();
-  const pwd = document.getElementById('singlePwd').value.trim();
-  const days = Number(document.getElementById('singleExpireDays').value)||0;
-  if(!user||!pwd) { alert('请填写账号密码'); return; }
-  try {
-    const r = await fetch(BASE_API + '/api/admin/batch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lines: user+' '+pwd, days })
-    });
-    const d = await r.json();
-    alert('添加成功');
-    hideAllModal();
-    loadList();
-  } catch(e) { alert('网络错误'); }
-}
-
-// 批量添加
-async function batchAdd() {
-  const lines = document.getElementById('batchLines').value.trim();
-  const days = Number(document.getElementById('expireDays').value)||0;
-  if(!lines) { alert('请输入内容'); return; }
-  try {
-    const res = await fetch(BASE_API + '/api/admin/batch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lines, days })
-    });
-    const d = await res.json();
-    alert(`成功：${d.success} 个`);
-    hideAllModal();
-    loadList();
-  } catch(e) { alert('网络错误'); }
-}
-
-// 复制账号密码
-function copyUser(username, password){
-  const text = `账号：${username}，密码：${password}`;
-  const i = document.createElement('input');
-  i.value = text; document.body.appendChild(i);
-  i.select(); document.execCommand('copy');
-  i.remove();
-  alert('已复制');
-}
-
-// 列表
-async function loadList() {
-  try {
-    const r = await fetch(BASE_API + '/api/admin/list');
-    all = await r.json();
-    renderList();
-  } catch(e) {}
-}
-
-function renderList() {
-  const kw = document.getElementById('search').value.toLowerCase();
-  const f = all.filter(x => x.username.toLowerCase().includes(kw));
-  let html = `<table class="table">
-  <tr>
-    <th>账号</th><th>密码</th><th>在线</th><th>激活状态</th><th>剩余换绑</th><th>创建时间</th><th>到期时间</th><th>状态</th><th>操作</th>
-  </tr>`;
-  for(const u of f){
-    const on = u.token ? '在线' : '离线';
-    const cn = u.token ? 'online' : 'offline';
-    
-    let exp = "";
-    if(u.activeTime){
-      exp = u.expireAt ? new Date(u.expireAt).toLocaleString() : '永久';
-    }else{
-      exp = u.displayExpire || (u.days ? u.days+"天" : "永久");
-    }
-
-    const activeTxt = u.activeTime ? '<span class="act-yes">已激活</span>' : '<span class="act-no">未激活</span>';
-    const resetTimes = u.changeDeviceTimes ?? 1;
-
-    html += `<tr>
-      <td>${u.username}</td>
-      <td>${u.password}</td>
-      <td class="${cn}">${on}</td>
-      <td>${activeTxt}</td>
-      <td>${resetTimes}次</td>
-      <td>${new Date(u.createdAt).toLocaleString()}</td>
-      <td>${exp}</td>
-      <td>${u.enabled?'启用':'禁用'}</td>
-      <td>
-        <button class="copy-btn" onclick="copyUser('${u.username}','${u.password}')">复制</button>
-        <button style="padding:4px;font-size:12px" onclick="toggle('${u.username}',${!u.enabled})">
-          ${u.enabled?'禁用':'启用'}
-        </button>
-        <button class="reset-btn" onclick="resetDeviceTimes('${u.username}')">重置换绑</button>
-        <button class="kick-btn" onclick="forceLogout('${u.username}')">强制下线</button>
-        <button class="red" style="padding:4px;font-size:12px" onclick="del('${u.username}')">删除</button>
-      </td>
-    </tr>`;
-  }
-  html += '</table>';
-  document.getElementById('listWrap').innerHTML = html;
-}
-
-function startAutoRefresh() {
-  loadList();
-  clearInterval(autoRefreshTimer);
-  autoRefreshTimer = setInterval(loadList, 5000);
-}
-
-async function toggle(user, enabled) {
-  await fetch(BASE_API + '/api/admin/toggle', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username:user, enabled })
-  });
-  loadList();
-}
-
-async function del(user) {
-  if(!confirm('确定删除？')) return;
-  await fetch(BASE_API + '/api/admin/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username:user })
-  });
-  loadList();
-}
-
-
-// ====================== 接口池管理JS函数 新增开始 ======================
-async function loadPoolList(){
-  try{
-    let res = await fetch(BASE_API+'/api/admin/pool-list');
-    poolList = await res.json();
-    renderPoolList();
-  }catch(e){}
-}
-
-function showAddPoolModal(){
-  hideAllModal();
-  document.getElementById('poolModalTitle').innerText = '新增抓取接口';
-  document.getElementById('poolApiUrl').value = '';
-  document.getElementById('poolRemark').value = '';
-  document.getElementById('poolEditId').value = '';
-  document.getElementById('poolModal').classList.add('show');
-}
-
-function showEditPoolModal(item){
-  hideAllModal();
-  document.getElementById('poolModalTitle').innerText = '编辑接口';
-  document.getElementById('poolApiUrl').value = item.apiUrl;
-  document.getElementById('poolRemark').value = item.remark;
-  document.getElementById('poolEditId').value = item.id;
-  document.getElementById('poolModal').classList.add('show');
-}
-
-async function savePoolItem(){
-  let id = document.getElementById('poolEditId').value;
-  let apiUrl = document.getElementById('poolApiUrl').value.trim();
-  let remark = document.getElementById('poolRemark').value.trim();
-  if(!apiUrl){alert('请填写接口地址');return;}
-  try{
-    await fetch(BASE_API+'/api/admin/pool-save',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:id?Number(id):null,apiUrl,remark})
-    });
-    hideAllModal();
-    loadPoolList();
-  }catch(e){alert('保存失败');}
-}
-
-async function delPoolItem(id){
-  if(!confirm('确定删除该节点？'))return;
-  try{
-    await fetch(BASE_API+'/api/admin/pool-del',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id})
-    });
-    loadPoolList();
-  }catch(e){}
-}
-
-async function testSinglePool(apiUrl){
-  try{
-    let res = await fetch(BASE_API+'/api/admin/pool-test-one',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({apiUrl})
-    });
-    let d = await res.json();
-    loadPoolList();
-    if(d.status==='normal') alert('检测通过：正常可用');
-    else if(d.status==='timeout') alert('检测结果：超时');
-    else alert('检测结果：已封禁');
-  }catch(e){alert('检测请求失败');}
-}
-
-async function testAllPool(){
-  if(!confirm('确定批量检测所有节点？'))return;
-  try{
-    await fetch(BASE_API+'/api/admin/pool-test-all',{method:'POST'});
-    alert('批量检测完成');
-    loadPoolList();
-  }catch(e){alert('批量检测失败');}
-}
-
-async function switchAutoCheck(){
-  autoCheckOn = !autoCheckOn;
-  try{
-    await fetch(BASE_API+'/api/admin/set-auto-check',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({open:autoCheckOn})
-    });
-    let btn = document.getElementById('autoCheckBtn');
-    if(autoCheckOn){
-      btn.innerText = '关闭定时自动检测';
-      btn.style.background = '#ef4444';
-      alert('已开启：每60分钟自动检测一次IP状态');
-    }else{
-      btn.innerText = '开启定时自动检测';
-      btn.style.background = '#6b7280';
-      alert('已关闭自动检测');
-    }
-  }catch(e){alert('操作失败');}
-}
-
-function renderPoolList(){
-  let html = `<table class="table">
-    <tr>
-      <th>接口地址</th>
-      <th>备注</th>
-      <th>状态</th>
-      <th>今日调用</th>
-      <th>累计调用</th>
-      <th>工作状态</th>
-      <th>最后检测时间</th>
-      <th>操作</th>
-    </tr>`;
-  if(poolList.length===0){
-    html += '<tr><td colspan="8" style="text-align:center;color:#999;">暂无接口节点，请新增</td></tr>';
-  }
-  for(let item of poolList){
-    let statusText = '';
-    let statusClass = '';
-    if(item.status==='normal'){statusText='正常';statusClass='status-normal';}
-    else if(item.status==='timeout'){statusText='超时';statusClass='status-timeout';}
-    else if(item.status==='banned'){statusText='已封禁';statusClass='status-banned';}
-    else{statusText='未检测';statusClass='status-unknown';}
-
-    let workText = item.isWorking ? '抓取中' : '空闲';
-    let workClass = item.isWorking ? 'working-yes' : 'working-no';
-
-    html += `<tr>
-      <td style="word-break:break-all">${item.apiUrl}</td>
-      <td>${item.remark||'-'}</td>
-      <td class="${statusClass}">${statusText}</td>
-      <td>${item.todayCount||0}</td>
-      <td>${item.totalCount||0}</td>
-      <td class="${workClass}">${workText}</td>
-      <td>${item.lastTestTime?new Date(item.lastTestTime).toLocaleString():'-'}</td>
-      <td>
-        <button class="copy-btn" onclick="testSinglePool('${item.apiUrl}')">检测</button>
-        <button class="reset-btn" onclick="showEditPoolModal(${JSON.stringify(item).replace(/"/g,'&quot;')})">编辑</button>
-        <button class="red" style="padding:4px;font-size:12px" onclick="delPoolItem(${item.id})">删除</button>
-      </td>
-    </tr>`;
-  }
-  html += '</table>';
-  document.getElementById('poolListWrap').innerHTML = html;
-}
-// ====================== 接口池管理JS函数 新增结束 ======================
-
-</script>
-</body>
-</html>
