@@ -167,12 +167,24 @@ app.post('/api/check-auth', (req, res) => {
   return res.json({ code: 0, msg: '验证通过' });
 });
 
+// 重置换绑次数为 1
 app.post('/api/admin/reset-device-times', (req, res) => {
   const { username } = req.body;
   const db = readDB();
   const user = db.find(x => x.username === username);
   if(!user) return res.json({ ok:false, msg:'用户不存在' });
   user.changeDeviceTimes = 1;
+  writeDB(db);
+  res.json({ ok:true });
+});
+
+// ✅ 新增：自定义设置换绑次数
+app.post('/api/admin/set-device-times', (req, res) => {
+  const { username, times } = req.body;
+  const db = readDB();
+  const user = db.find(x => x.username === username);
+  if(!user) return res.json({ ok:false, msg:'用户不存在' });
+  user.changeDeviceTimes = parseInt(times) || 0;
   writeDB(db);
   res.json({ ok:true });
 });
