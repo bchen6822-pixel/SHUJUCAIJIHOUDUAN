@@ -1,41 +1,57 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
 const https = require('https');
+const mongoose = require('mongoose');
+const path = require('path');
 
 const app = express();
-
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 app.use(bodyParser.json());
 
-// 🔥 修复：加根路径，解决 Cannot GET /
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
+// 你的数据库已经填好！
+const MONGODB_URI = "mongodb+srv://bchen6822_db_user:OSmT19fe4MN6Wif0@cluster0.0peovwc.mongodb.net/?appName=Cluster0";
 
-// 数据库
-const DB_FILE = path.join(__dirname, 'db.json');
-const POOL_FILE = path.join(__dirname, 'pool.json');
-
-// 不存在就自动创建空文件
-function initFile(filePath) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify([], null, 2));
-  }
-}
-initFile(DB_FILE);
-initFile(POOL_FILE);
+mongoose.connect(MONGODB_URI)
+.then(()=>console.log("✅ 云端数据库连接成功，数据永不丢失"))
+.catch(err=>console.log("❌ 数据库连接失败：",err));
 
 let admin = {
   user: "admin",
   pwd: "admin123"
 };
 
-// 全局浏览器伪装请求头
+const userSchema = new mongoose.Schema({
+  username:String,
+  password:String,
+  enabled:Boolean,
+  createdAt:String,
+  expireAt:String,
+  token:String,
+  activeTime:String,
+  deviceFp:String,
+  changeDeviceTimes:Number,
+  sessionId:String,
+  days:Number
+});
+const User = mongoose.model('User',userSchema);
+
+const poolSchema = new mongoose.Schema({
+  id:Number,
+  apiUrl:String,
+  remark:String,
+  status:String,
+  lastTestTime:String,
+  todayCount:Number,
+  totalCount:Number,
+  isWorking:Boolean,
+  lastCallTime:String,
+  resetDate:String
+});
+const Pool = mongoose.model('Pool',poolSchema);
+
 const browserHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36,Chrome/135.0.0.0 Safari/537.36',
   'Referer': 'https://www.tiktok.com/',
@@ -43,13 +59,6 @@ const browserHeaders = {
   'Accept-Language': 'en-US,en;q=0.9'
 };
 
-// 工具函数
-function readDB() {
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-}
-function writeDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-}
 function now() {
   return new Date().toISOString();
 }
@@ -60,50 +69,23 @@ function genSessionId(){
   return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-// 接口池 自动建文件 + 自动补全所有统计字段 + 每日重置
-function readPool(){
-  if (!fs.existsSync(POOL_FILE)) {
-    fs.writeFileSync(POOL_FILE, JSON.stringify([], null, 2));
-  }
-  let list = JSON.parse(fs.readFileSync(POOL_FILE,'utf8'));
-  const today = new Date().toLocaleDateString();
-  
-  list.forEach(item=>{
-    if(item.todayCount === undefined) item.todayCount = 0;
-    if(item.totalCount === undefined) item.totalCount = 0;
-    if(item.isWorking === undefined) item.isWorking = false;
-    if(item.lastCallTime === undefined) item.lastCallTime = "";
-    if(item.resetDate === undefined) item.resetDate = today;
-    if(item.status === undefined) item.status = "normal";
-    if(item.lastTestTime === undefined) item.lastTestTime = "";
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
-    // 每日清零今日调用次数
-    if(item.resetDate !== today){
-      item.todayCount = 0;
-      item.resetDate = today;
-    }
-  });
-  return list;
-}
-function writePool(list){
-  fs.writeFileSync(POOL_FILE, JSON.stringify(list,null,2));
-}
-
-// 登录
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password, device_fp } = req.body;
-  const db = readDB();
-  const user = db.find(u => u.username === username);
+  const user = await User.findOne({username});
   
   if (!user) return res.json({ ok: false, msg: '账号不存在' });
   if (user.password !== password) return res.json({ ok: false, msg: '密码错误' });
   if (!user.enabled) return res.json({ ok: false, msg: '账号已禁用' });
 
-  if(user.activeTime === undefined) user.activeTime = null;
-  if(user.deviceFp === undefined) user.deviceFp = "";
-  if(user.changeDeviceTimes === undefined) user.changeDeviceTimes = 1;
-  if(user.sessionId === undefined) user.sessionId = "";
-  if(user.days === undefined) user.days = null;
+  if(!user.activeTime) user.activeTime = null;
+  if(!user.deviceFp) user.deviceFp = "";
+  if(!user.changeDeviceTimes) user.changeDeviceTimes = 1;
+  if(!user.sessionId) user.sessionId = "";
+  if(!user.days) user.days = null;
 
   if(!user.activeTime){
     user.activeTime = now();
@@ -133,24 +115,21 @@ app.post('/api/login', (req, res) => {
   const sessionId = genSessionId();
   user.token = token;
   user.sessionId = sessionId;
-
-  writeDB(db);
+  await user.save();
   res.json({ ok: true, token, sessionId });
 });
 
-app.post('/api/check', (req, res) => {
+app.post('/api/check', async (req, res) => {
   const { username, token } = req.body;
-  const db = readDB();
-  const user = db.find(u => u.username === username);
+  const user = await User.findOne({username});
   if (!user || !user.enabled || !user.token || user.token !== token) return res.json({ ok: false });
   if (user.expireAt && Date.now() > new Date(user.expireAt).getTime()) return res.json({ ok: false });
   res.json({ ok: true });
 });
 
-app.post('/api/check-auth', (req, res) => {
+app.post('/api/check-auth', async (req, res) => {
   const { username, device_fp } = req.body;
-  const db = readDB();
-  const user = db.find(u => u.username === username);
+  const user = await User.findOne({username});
 
   if(!user || !user.enabled){
     return res.json({ code: -99, msg: '账号不可用' });
@@ -167,36 +146,32 @@ app.post('/api/check-auth', (req, res) => {
   return res.json({ code: 0, msg: '验证通过' });
 });
 
-app.post('/api/admin/reset-device-times', (req, res) => {
+app.post('/api/admin/reset-device-times', async (req, res) => {
   const { username } = req.body;
-  const db = readDB();
-  const user = db.find(x => x.username === username);
+  const user = await User.findOne({username});
   if(!user) return res.json({ ok:false, msg:'用户不存在' });
   user.changeDeviceTimes = 1;
-  writeDB(db);
+  await user.save();
   res.json({ ok:true });
 });
 
-// 新增自定义设置换绑次数接口
-app.post('/api/admin/set-device-times', (req, res) => {
+app.post('/api/admin/set-device-times', async (req, res) => {
   const { username, times } = req.body;
-  const db = readDB();
-  const user = db.find(x => x.username === username);
+  const user = await User.findOne({username});
   if(!user) return res.json({ ok:false, msg:'用户不存在' });
   user.changeDeviceTimes = parseInt(times) || 0;
-  writeDB(db);
+  await user.save();
   res.json({ ok:true });
 });
 
-app.post('/api/admin/force-logout', (req, res) => {
+app.post('/api/admin/force-logout', async (req, res) => {
   const { username } = req.body;
-  const db = readDB();
-  const user = db.find(x => x.username === username);
+  const user = await User.findOne({username});
   if(user){
     user.token = null;
     user.sessionId = null;
+    await user.save();
   }
-  writeDB(db);
   res.json({ ok:true });
 });
 
@@ -206,18 +181,17 @@ app.post('/api/admin/login', (req, res) => {
   res.json({ ok: false });
 });
 
-app.get('/api/admin/list', (req, res) => {
-  const db = readDB();
-  db.forEach(item=>{
-    if(item.activeTime === undefined) item.activeTime = null;
-    if(item.deviceFp === undefined) item.deviceFp = "";
-    if(item.changeDeviceTimes === undefined) item.changeDeviceTimes = 1;
-    if(item.sessionId === undefined) item.sessionId = "";
-    if(item.days === undefined) item.days = null;
+app.get('/api/admin/list', async (req, res) => {
+  const list = await User.find({});
+  list.forEach(item=>{
+    if(!item.activeTime) item.activeTime = null;
+    if(!item.deviceFp) item.deviceFp = "";
+    if(!item.changeDeviceTimes) item.changeDeviceTimes = 1;
+    if(!item.sessionId) item.sessionId = "";
+    if(!item.days) item.days = null;
   });
-
-  const showList = db.map(item => {
-    const temp = {...item};
+  const showList = list.map(item => {
+    const temp = {...item._doc};
     if(!temp.activeTime){
       temp.displayExpire = temp.days && temp.days > 0 ? `${temp.days}天` : "永久";
     }else{
@@ -225,42 +199,38 @@ app.get('/api/admin/list', (req, res) => {
     }
     return temp;
   });
-
-  writeDB(db);
   res.json(showList);
 });
 
-app.post('/api/admin/delete', (req, res) => {
+app.post('/api/admin/delete', async (req, res) => {
   const { username } = req.body;
-  let db = readDB().filter(x => x.username !== username);
-  writeDB(db);
+  await User.deleteOne({username});
   res.json({ ok: true });
 });
 
-app.post('/api/admin/toggle', (req, res) => {
+app.post('/api/admin/toggle', async (req, res) => {
   const { username, enabled } = req.body;
-  const db = readDB();
-  const u = db.find(x => x.username === username);
-  if (u) {
-    u.enabled = enabled;
-    if (!enabled) u.token = null;
+  const user = await User.findOne({username});
+  if (user) {
+    user.enabled = enabled;
+    if (!enabled) user.token = null;
+    await user.save();
   }
-  writeDB(db);
   res.json({ ok: true });
 });
 
-app.post('/api/admin/batch', (req, res) => {
+app.post('/api/admin/batch', async (req, res) => {
   const { lines, days } = req.body;
-  const db = readDB();
   const arr = lines.split(/\n/).map(x => x.trim()).filter(Boolean);
   let success = 0, exist = 0;
 
   for (const line of arr) {
     const [user, pwd] = line.split(/\s+/).filter(Boolean);
     if (!user || !pwd) continue;
-    if (db.some(x => x.username === user)) { exist++; continue; }
+    const findOne = await User.findOne({username:user});
+    if(findOne) {exist++;continue;}
 
-    db.push({
+    await User.create({
       username: user,
       password: pwd,
       enabled: true,
@@ -275,8 +245,6 @@ app.post('/api/admin/batch', (req, res) => {
     });
     success++;
   }
-
-  writeDB(db);
   res.json({ ok: true, success, exist });
 });
 
@@ -287,10 +255,9 @@ app.post('/api/admin/set-user-pwd', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/admin/set-expire', (req, res) => {
+app.post('/api/admin/set-expire', async (req, res) => {
   const { username, days } = req.body;
-  const db = readDB();
-  const user = db.find(u => u.username === username);
+  const user = await User.findOne({username});
   if (!user) return res.json({ ok: false, msg: "用户不存在" });
 
   if (days <= 0) {
@@ -304,8 +271,7 @@ app.post('/api/admin/set-expire', (req, res) => {
       user.expireAt = null;
     }
   }
-
-  writeDB(db);
+  await user.save();
   res.json({ ok: true });
 });
 
@@ -315,7 +281,6 @@ app.get('/api/tiktok-user', async (req, res) => {
     if (!unique_id) {
       return res.json({ code: -1, msg: '缺少参数' });
     }
-
     const apiUrl = `https://www.tikwm.com/api/user/info?unique_id=${unique_id}`;
     const result = await axios.get(apiUrl, { 
       timeout: 15000,
@@ -327,23 +292,37 @@ app.get('/api/tiktok-user', async (req, res) => {
   }
 });
 
-// 接口池列表
-app.get('/api/admin/pool-list',(req,res)=>{
-  res.json(readPool());
+app.get('/api/admin/pool-list',async (req,res)=>{
+  let list = await Pool.find({});
+  const today = new Date().toLocaleDateString();
+  list.forEach(async item=>{
+    if(!item.todayCount) item.todayCount = 0;
+    if(!item.totalCount) item.totalCount = 0;
+    if(!item.isWorking) item.isWorking = false;
+    if(!item.lastCallTime) item.lastCallTime = "";
+    if(!item.resetDate) item.resetDate = today;
+    if(!item.status) item.status = "normal";
+    if(!item.lastTestTime) item.lastTestTime = "";
+    if(item.resetDate !== today){
+      item.todayCount = 0;
+      item.resetDate = today;
+      await item.save();
+    }
+  });
+  res.json(list);
 });
 
-// 添加编辑节点 自带全部统计字段
-app.post('/api/admin/pool-save',(req,res)=>{
-  let list = readPool();
+app.post('/api/admin/pool-save',async (req,res)=>{
   const { id, apiUrl, remark } = req.body;
   if(id){
-    let item = list.find(x=>x.id===id);
+    const item = await Pool.findOne({id});
     if(item){
       item.apiUrl = apiUrl;
       item.remark = remark;
+      await item.save();
     }
   }else{
-    list.push({
+    await Pool.create({
       id: Date.now(),
       apiUrl,
       remark,
@@ -356,19 +335,14 @@ app.post('/api/admin/pool-save',(req,res)=>{
       resetDate: new Date().toLocaleDateString()
     });
   }
-  writePool(list);
   res.json({ok:true});
 });
 
-// 删除节点
-app.post('/api/admin/pool-del',(req,res)=>{
-  let list = readPool();
-  list = list.filter(x=>x.id !== req.body.id);
-  writePool(list);
+app.post('/api/admin/pool-del',async (req,res)=>{
+  await Pool.deleteOne({id:req.body.id});
   res.json({ok:true});
 });
 
-// 单个测试
 app.post('/api/admin/pool-test-one',async (req,res)=>{
   const {apiUrl} = req.body;
   let status = "normal";
@@ -381,19 +355,17 @@ app.post('/api/admin/pool-test-one',async (req,res)=>{
   }catch(e){
     status = "banned";
   }
-  let list = readPool();
-  let item = list.find(x=>x.apiUrl===apiUrl);
+  const item = await Pool.findOne({apiUrl});
   if(item){
     item.status = status;
     item.lastTestTime = now();
+    await item.save();
   }
-  writePool(list);
   res.json({ok:true,status});
 });
 
-// 批量测试
 app.post('/api/admin/pool-test-all',async (req,res)=>{
-  let list = readPool();
+  let list = await Pool.find({});
   for(let item of list){
     let status = "normal";
     try{
@@ -407,17 +379,16 @@ app.post('/api/admin/pool-test-all',async (req,res)=>{
     }
     item.status = status;
     item.lastTestTime = now();
+    await item.save();
   }
-  writePool(list);
   res.json({ok:true});
 });
 
-// 自动检测
 let autoCheckInterval = null;
 const AUTO_CHECK_INTERVAL = 60 * 60 * 1000;
 
 async function autoCheckPool(){
-  let list = readPool();
+  let list = await Pool.find({});
   for(let item of list){
     let status = "normal";
     try{
@@ -431,8 +402,8 @@ async function autoCheckPool(){
     }
     item.status = status;
     item.lastTestTime = now();
+    await item.save();
   }
-  writePool(list);
   console.log("✅ 定时自动检测接口池完成");
 }
 
@@ -451,29 +422,21 @@ app.post('/api/admin/set-auto-check',(req,res)=>{
   res.json({ok:true});
 });
 
-// 轮换接口 + 统计今日/累计调用 + 工作状态
 app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
 
-  let list = readPool();
-  let avail = list.filter(x=>x.status === "normal");
-  if(avail.length === 0){
+  let list = await Pool.find({status:"normal"});
+  if(list.length === 0){
     return res.json({success:false,msg:"暂无可用抓取节点，请后台检查接口池"});
   }
 
-  // 随机选节点
-  let randomNode = avail[Math.floor(Math.random()*avail.length)];
-  let idx = list.findIndex(x=>x.id === randomNode.id);
-
-  // 标记工作中 + 计数
-  if(idx > -1){
-    list[idx].isWorking = true;
-    list[idx].todayCount += 1;
-    list[idx].totalCount += 1;
-    list[idx].lastCallTime = now();
-    writePool(list);
-  }
+  let randomNode = list[Math.floor(Math.random()*list.length)];
+  randomNode.isWorking = true;
+  randomNode.todayCount += 1;
+  randomNode.totalCount += 1;
+  randomNode.lastCallTime = now();
+  await randomNode.save();
 
   try{
     const targetUrl = `${randomNode.apiUrl}/get-avatar?username=${username}`;
@@ -481,23 +444,16 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
       timeout:10000,
       headers: browserHeaders
     });
-
-    // 请求成功 恢复空闲
-    if(idx > -1){
-      list[idx].isWorking = false;
-      writePool(list);
-    }
+    randomNode.isWorking = false;
+    await randomNode.save();
     res.json(result.data);
   }catch(e){
-    // 请求失败 标记封禁 + 恢复空闲
-    if(idx > -1){
-      list[idx].status = "banned";
-      list[idx].isWorking = false;
-      writePool(list);
-    }
+    randomNode.status = "banned";
+    randomNode.isWorking = false;
+    await randomNode.save();
     res.json({success:false,msg:"当前节点抓取失败，已自动标记封禁，请重试"});
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('✅ 服务运行正常'));
+app.listen(PORT, () => console.log(`✅ 服务运行正常，端口：${PORT}`));
