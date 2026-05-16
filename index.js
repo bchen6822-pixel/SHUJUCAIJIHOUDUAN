@@ -457,3 +457,41 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ 服务运行正常，端口：${PORT}`));
+
+// ====================== MongoDB 测试 ======================
+const mongoose = require('mongoose');
+
+// 测试模型
+const TestSchema = new mongoose.Schema({
+  msg: String,
+  time: Date
+});
+const Test = mongoose.model('Test', TestSchema);
+
+// 测试接口
+app.get('/test-mongo', async (req, res) => {
+  try {
+    // 写入数据
+    const data = await Test.create({
+      msg: "MongoDB 连接成功！数据写入正常",
+      time: new Date()
+    });
+    
+    // 读取数据
+    const all = await Test.find();
+    
+    res.json({
+      status: "✅ 成功",
+      message: "MongoDB 读写完全正常！",
+      write: data,
+      allData: all
+    });
+  } catch (err) {
+    res.json({
+      status: "❌ 失败",
+      error: err.message
+    });
+  }
+});
+console.log("✅ MongoDB 测试接口已开启：/test-mongo");
+// ==========================================================
