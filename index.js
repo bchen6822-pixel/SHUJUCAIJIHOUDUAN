@@ -452,5 +452,31 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
 });
 // ==============================================================
 
+// ===================== 新增：图片代理路由 proxy-image =====================
+app.get('/proxy-image', async (req, res) => {
+  const rawUrl = req.query.url;
+  if (!rawUrl) {
+    return res.status(400).send('missing url param');
+  }
+  try {
+    const imgRes = await axios.get(rawUrl, {
+      responseType: 'stream',
+      timeout: 12000,
+      headers: {
+        ...browserHeaders,
+      },
+      httpsAgent: agent
+    });
+    // 把图片类型直接透传给浏览器
+    res.setHeader('Content-Type', imgRes.headers['content-type']);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    imgRes.data.pipe(res);
+  } catch (err) {
+    console.log('❌ proxy-image fail:', err.message);
+    res.status(404).send('image load fail');
+  }
+});
+// ======================================================================
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`✅ 服务运行正常，端口：${PORT}`));
