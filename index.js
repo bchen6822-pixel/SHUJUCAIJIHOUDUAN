@@ -430,7 +430,7 @@ app.post('/api/admin/set-auto-check',(req,res)=>{
   res.json({ok:true});
 });
 
-// ================【修改后的 tiktok-rotate 路由】================
+// ================【修复转义 tiktok-rotate 路由】================
 app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
@@ -444,7 +444,17 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
       maxRedirects: 5
     });
     console.log("✅转发成功，拿到抓取返回：", result.data);
-    res.json(result.data);
+    let data = result.data;
+    if(data.avatarUrl){
+      const [pathPart, queryPart] = data.avatarUrl.split('?');
+      const fixedPath = pathPart.replaceAll("u002F","/");
+      if(queryPart){
+        data.avatarUrl = `${fixedPath}?${queryPart}`;
+      }else{
+        data.avatarUrl = fixedPath;
+      }
+    }
+    res.json(data);
   }catch(e){
     console.log("❌调用Railway抓取报错：", e.message, e?.response?.status);
     res.json({success:false,msg:"抓取接口请求失败",error:e.message});
@@ -452,7 +462,7 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
 });
 // ==============================================================
 
-// ===================== 新增：图片代理路由 proxy-image =====================
+// ===================== 图片代理路由 proxy-image =====================
 app.get('/proxy-image', async (req, res) => {
   const rawUrl = req.query.url;
   if (!rawUrl) {
@@ -467,7 +477,6 @@ app.get('/proxy-image', async (req, res) => {
       },
       httpsAgent: agent
     });
-    // 把图片类型直接透传给浏览器
     res.setHeader('Content-Type', imgRes.headers['content-type']);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     imgRes.data.pipe(res);
