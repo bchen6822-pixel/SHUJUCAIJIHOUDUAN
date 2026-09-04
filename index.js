@@ -346,6 +346,47 @@ app.post('/api/admin/set-usd-balance', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ===================== 用户扣Coin接口 deduct-coin =====================
+app.post('/api/deduct-coin', async (req, res) => {
+  try {
+    const { username, token, coinAmount } = req.body;
+    if (!username || !token || !coinAmount || coinAmount <= 0) {
+      return res.json({ ok: false, msg: "参数不完整" });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user || !user.enabled || !user.token || user.token !== token) {
+      return res.json({ ok: false, msg: "登录失效，请重新登录" });
+    }
+    if (user.expireAt && Date.now() > new Date(user.expireAt).getTime()) {
+      return res.json({ ok: false, msg: "账号已过期" });
+    }
+
+    const usdNeed = coinAmount / USD_TO_COIN_RATE;
+    const currentUsd = Number(user.usd_balance || 0);
+
+    if (currentUsd < usdNeed) {
+      return res.json({ ok: false, msg: "余额不足" });
+    }
+
+    // 扣美金，保留两位小数，防止浮点漂移
+    user.usd_balance = Math.round((currentUsd - usdNeed) * 100) / 100;
+    await user.save();
+
+    const newUsd = user.usd_balance;
+    const newCoin = newUsd * USD_TO_COIN_RATE;
+
+    res.json({
+      ok: true,
+      new_usd: newUsd,
+      new_coin: newCoin
+    });
+  } catch (err) {
+    console.error('deduct-coin error:', err);
+    res.json({ ok: false, msg: "扣款处理失败，请稍后重试" });
+  }
+});
+
 app.get('/api/tiktok-user', async (req, res) => {
   try {
     const { unique_id } = req.query;
