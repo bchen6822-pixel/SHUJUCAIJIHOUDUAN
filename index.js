@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const cloudscraper = require('cloudscraper');
 const https = require('https');
 const mongoose = require('mongoose');
 const path = require('path');
@@ -275,19 +276,22 @@ app.post('/api/admin/set-expire', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ========== 修改后的 /api/tiktok‑user ==========
 app.get('/api/tiktok-user', async (req, res) => {
   try {
     const { unique_id } = req.query;
     if (!unique_id) {
       return res.json({ code: -1, msg: '缺少参数' });
     }
-    const apiUrl = `https://www.tikwm.com/api/user/info?unique_id=${unique_id}`;
-    const result = await axios.get(apiUrl, { 
-      timeout: 15000,
+    const apiUrl = `https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(unique_id)}`;
+    const resultText = await cloudscraper.get(apiUrl, {
+      timeout:15000,
       headers: browserHeaders
     });
+    const result = JSON.parse(resultText);
     res.json(result.data);
   } catch (e) {
+    console.error("抓取报错：", e.message);
     res.json({ code: -1, msg: '请求失败' });
   }
 });
