@@ -11,6 +11,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 app.use(bodyParser.json());
 
+// ======================【可自行更换API地址】======================
+// 抓取头像、粉丝数据统一走这个接口，以后换域名只改这一行
+const TIKTOK_CAPTURE_API = "https://zhenshiuser-production.up.railway.app";
+// ===============================================================
+
 // 你的数据库已经填好！
 const MONGODB_URI = "mongodb+srv://bchen6822_db_user:OSmT19fe4MN6WifO@cluster0.0peovwc.mongodb.net/?appName=Cluster0";
 
@@ -422,38 +427,24 @@ app.post('/api/admin/set-auto-check',(req,res)=>{
   res.json({ok:true});
 });
 
+// ================【修改后的 tiktok-rotate 路由】================
 app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
 
-  let list = await Pool.find({status:"normal"});
-  if(list.length === 0){
-    return res.json({success:false,msg:"暂无可用抓取节点，请后台检查接口池"});
-  }
-
-  let randomNode = list[Math.floor(Math.random()*list.length)];
-  randomNode.isWorking = true;
-  randomNode.todayCount += 1;
-  randomNode.totalCount += 1;
-  randomNode.lastCallTime = now();
-  await randomNode.save();
-
+  // 直接调用上面常量定义好的自己API
+  const targetUrl = `${TIKTOK_CAPTURE_API}/get-avatar?username=${username}`;
   try{
-    const targetUrl = `${randomNode.apiUrl}/get-avatar?username=${username}`;
     const result = await axios.get(targetUrl,{
       timeout:10000,
       headers: browserHeaders
     });
-    randomNode.isWorking = false;
-    await randomNode.save();
     res.json(result.data);
   }catch(e){
-    randomNode.status = "banned";
-    randomNode.isWorking = false;
-    await randomNode.save();
-    res.json({success:false,msg:"当前节点抓取失败，已自动标记封禁，请重试"});
+    res.json({success:false,msg:"抓取接口请求失败，请检查API可用性"});
   }
 });
+// ==============================================================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ 服务运行正常，端口：${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`✅ 服务运行正常，端口：${PORT}`));
