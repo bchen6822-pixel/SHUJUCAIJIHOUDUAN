@@ -19,10 +19,12 @@ const agent = new https.Agent({ rejectUnauthorized: false });
 const TIKTOK_CAPTURE_API = "https://zhenshiuser-production.up.railway.app";
 // ===============================================================
 
-// TikTok 汇率 1美金 = 95币
+// ======================【TikTok官方统一汇率】======================
+// 2025年美国网页端官方费率：1美金 = 95币（1币 ≈ $0.010526 USD）
 const USD_TO_COIN_RATE = 95;
+// =================================================================
 
-// 生成 6~7 位不规则美金余额
+// 生成 6~7 位不规则美金余额（100000.00 ~ 999999.99）
 function randomUsdBalance(){
   const intPart = Math.floor(Math.random() * 900000 + 100000);
   const decPart = Math.floor(Math.random() * 99);
@@ -92,6 +94,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+// ======================【登录接口 - 已修复返回余额】======================
 app.post('/api/login', async (req, res) => {
   const { username, password, device_fp } = req.body;
   const user = await User.findOne({username});
@@ -135,17 +138,40 @@ app.post('/api/login', async (req, res) => {
   user.token = token;
   user.sessionId = sessionId;
   await user.save();
-  res.json({ ok: true, token, sessionId });
+
+  // ✅ 统一计算余额并返回给前端
+  const usdBalance = user.usd_balance || 0;
+  const coinBalance = usdBalance * USD_TO_COIN_RATE;
+  
+  res.json({ 
+    ok: true, 
+    token, 
+    sessionId,
+    usd_balance: usdBalance,
+    coin_balance: coinBalance,
+    rate_text: `1 USD = ${USD_TO_COIN_RATE} Coin`
+  });
 });
 
+// ======================【校验接口 - 已修复返回余额】======================
 app.post('/api/check', async (req, res) => {
   const { username, token } = req.body;
   const user = await User.findOne({username});
   if (!user || !user.enabled || !user.token || user.token !== token) return res.json({ ok: false });
   if (user.expireAt && Date.now() > new Date(user.expireAt).getTime()) return res.json({ ok: false });
-  res.json({ ok: true });
+  
+  // ✅ 校验成功同时返回最新余额
+  const usdBalance = user.usd_balance || 0;
+  const coinBalance = usdBalance * USD_TO_COIN_RATE;
+  res.json({ 
+    ok: true,
+    usd_balance: usdBalance,
+    coin_balance: coinBalance,
+    rate_text: `1 USD = ${USD_TO_COIN_RATE} Coin`
+  });
 });
 
+// ======================【设备校验接口 - 已修复返回余额】======================
 app.post('/api/check-auth', async (req, res) => {
   const { username, device_fp } = req.body;
   const user = await User.findOne({username});
@@ -162,7 +188,17 @@ app.post('/api/check-auth', async (req, res) => {
   if(user.deviceFp && user.deviceFp !== device_fp){
     return res.json({ code: -2, msg: '设备不匹配' });
   }
-  return res.json({ code: 0, msg: '验证通过' });
+  
+  // ✅ 验证通过返回最新余额，前端自动渲染
+  const usdBalance = user.usd_balance || 0;
+  const coinBalance = usdBalance * USD_TO_COIN_RATE;
+  return res.json({ 
+    code: 0, 
+    msg: '验证通过',
+    balance_usd: usdBalance,
+    balance_coins: coinBalance,
+    rate_text: `1 USD = ${USD_TO_COIN_RATE} Coin`
+  });
 });
 
 app.post('/api/admin/reset-device-times', async (req, res) => {
@@ -216,6 +252,7 @@ app.get('/api/admin/list', async (req, res) => {
     }else{
       temp.displayExpire = temp.expireAt ? new Date(temp.expireAt).toLocaleString() : "永久";
     }
+    // ✅ 统一使用后端汇率计算
     const usd = temp.usd_balance ?? 0;
     temp.usd_balance = usd;
     temp.coin_balance = usd * USD_TO_COIN_RATE;
@@ -265,7 +302,7 @@ app.post('/api/admin/batch', async (req, res) => {
       changeDeviceTimes: 1,
       sessionId: null,
       days: days > 0 ? days : null,
-      usd_balance: randomUsdBalance()
+      usd_balance: randomUsdBalance() // 自动生成6-7位不规则美金余额
     });
     success++;
   }
@@ -299,7 +336,7 @@ app.post('/api/admin/set-expire', async (req, res) => {
   res.json({ ok: true });
 });
 
-// 新增：管理员修改用户美金余额
+// 管理员修改用户美金余额
 app.post('/api/admin/set-usd-balance', async (req, res) => {
   const { username, usd_balance } = req.body;
   const user = await User.findOne({ username });
@@ -456,7 +493,7 @@ app.post('/api/admin/set-auto-check',(req,res)=>{
   res.json({ok:true});
 });
 
-// ================【修复转义 tiktok-rotate 路由】================
+// ================【TikTok头像抓取转发路由】================
 app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
