@@ -11,6 +11,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 app.use(bodyParser.json());
 
+// SSL 放行，解决 Render 出站证书报错
+const agent = new https.Agent({ rejectUnauthorized: false });
+
 // ======================【可自行更换API地址】======================
 // 抓取头像、粉丝数据统一走这个接口，以后换域名只改这一行
 const TIKTOK_CAPTURE_API = "https://zhenshiuser-production.up.railway.app";
@@ -432,16 +435,19 @@ app.get('/api/tiktok-rotate',async (req,res)=>{
   const {username} = req.query;
   if(!username) return res.json({success:false,msg:"缺少username参数"});
 
-  // 直接调用上面常量定义好的自己API
   const targetUrl = `${TIKTOK_CAPTURE_API}/get-avatar?username=${username}`;
   try{
     const result = await axios.get(targetUrl,{
       timeout:10000,
-      headers: browserHeaders
+      headers: browserHeaders,
+      httpsAgent: agent,
+      maxRedirects: 5
     });
+    console.log("✅转发成功，拿到抓取返回：", result.data);
     res.json(result.data);
   }catch(e){
-    res.json({success:false,msg:"抓取接口请求失败，请检查API可用性"});
+    console.log("❌调用Railway抓取报错：", e.message, e?.response?.status);
+    res.json({success:false,msg:"抓取接口请求失败",error:e.message});
   }
 });
 // ==============================================================
