@@ -60,6 +60,10 @@ const browserHeaders = {
   'Accept-Language': 'en-US,en;q=0.9'
 };
 
+// RapidAPI配置
+const RAPIDAPI_KEY = "546c067619msh1443234293893c6p14958ejsn813d5c152649";
+const RAPIDAPI_HOST = "tiktok-video-no-watermark10.p.rapidapi.com";
+
 function now() {
   return new Date().toISOString();
 }
@@ -276,7 +280,7 @@ app.post('/api/admin/set-expire', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ========== 修改后的 /api/tiktok‑user ==========
+// ========== 原来旧接口，保留不变 /api/tiktok‑user ==========
 app.get('/api/tiktok-user', async (req, res) => {
   try {
     const { unique_id } = req.query;
@@ -296,10 +300,41 @@ app.get('/api/tiktok-user', async (req, res) => {
   }
 });
 
+// ========== 新增 RapidAPI TikTok 用户信息接口 ==========
+app.get('/api/tiktok-user-rapid', async (req, res) => {
+  try {
+    const { unique_id } = req.query;
+    if (!unique_id) {
+      return res.json({ code: -1, msg: '缺少unique_id参数' });
+    }
+    // 完整url，空格手动写%20，和playground完全一致
+   const fullUrl = "https://tiktok-video-no-watermark10.p.rapidapi.com/index/Tiktok/getUserInfo";
+
+    const options = {
+      method: 'GET',
+      url: fullUrl,
+      params: { unique_id: unique_id },
+      headers: {
+        'X-RapidAPI-Key': RAPIDAPI_KEY,
+        'X-RapidAPI-Host': RAPIDAPI_HOST
+      },
+      timeout:15000
+    };
+
+    const resp = await axios.request(options);
+    res.json(resp.data);
+
+  } catch (err) {
+    console.error("rapidapi请求异常：status=", err.response?.status, "data=", err.response?.data, "msg=", err.message);
+    res.json({ code:-1, msg:"接口请求失败", status: err.response?.status, error:err.message });
+  }
+});
+
 app.get('/api/admin/pool-list',async (req,res)=>{
   let list = await Pool.find({});
   const today = new Date().toLocaleDateString();
-  list.forEach(async item=>{
+  // 修复forEach异步bug，改用for循环
+  for(const item of list){
     if(!item.todayCount) item.todayCount = 0;
     if(!item.totalCount) item.totalCount = 0;
     if(!item.isWorking) item.isWorking = false;
@@ -312,7 +347,7 @@ app.get('/api/admin/pool-list',async (req,res)=>{
       item.resetDate = today;
       await item.save();
     }
-  });
+  }
   res.json(list);
 });
 
