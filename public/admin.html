@@ -36,6 +36,7 @@ button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer
 }
 .reset-btn{background:#f59e0b;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin:2px;}
 .kick-btn{background:#8b5cf6;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin:2px;}
+.balance-btn{background:#0284c7;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;margin:2px;}
 
 /* 顶部小按钮栏 */
 .top-bar {
@@ -164,6 +165,17 @@ button{background:#10b985;color:#fff;border:none;font-weight:bold;cursor:pointer
     </div>
   </div>
 
+  <!-- 修改美金余额弹窗 -->
+  <div class="modal" id="modalBalance">
+    <div class="modal-box">
+      <h3>修改美金余额</h3>
+      <input id="balanceUsername" placeholder="用户名" readonly>
+      <input id="balanceUsd" type="number" step="0.01" placeholder="美金余额">
+      <button onclick="saveUsdBalance()">保存余额</button>
+      <button class="gray" onclick="hideAllModal()">取消</button>
+    </div>
+  </div>
+
   <div class="box">
     <h2>账号列表</h2>
     <input class="search" id="search" placeholder="搜索用户名" oninput="renderList()">
@@ -206,6 +218,12 @@ function showModalAdd()   { hideAllModal(); document.getElementById('modalAdd').
 function showModalBatch() { hideAllModal(); document.getElementById('modalBatch').classList.add('show'); }
 function showModalExpire(){ hideAllModal(); document.getElementById('modalExpire').classList.add('show'); }
 function showSetDeviceModal(){ hideAllModal(); document.getElementById('modalSetDevice').classList.add('show'); }
+function showBalanceModal(username, usd){
+  hideAllModal();
+  document.getElementById('balanceUsername').value = username;
+  document.getElementById('balanceUsd').value = usd;
+  document.getElementById('modalBalance').classList.add('show');
+}
 function hideAllModal() {
   document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
 }
@@ -330,6 +348,27 @@ async function saveDeviceTimes(){
   }
 }
 
+// 保存美金余额
+async function saveUsdBalance(){
+  const username = document.getElementById('balanceUsername').value;
+  const usd_balance = parseFloat(document.getElementById('balanceUsd').value) || 0;
+  try{
+    let res = await fetch(BASE_API + '/api/admin/set-usd-balance',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username, usd_balance})
+    });
+    let d = await res.json();
+    if(d.ok){
+      alert('余额修改成功');
+      hideAllModal();
+      loadList();
+    }else{
+      alert(d.msg || '修改失败');
+    }
+  }catch(e){alert('网络请求失败');}
+}
+
 async function forceLogout(username){
   if(!confirm('确定强制该用户下线？')) return;
   try{
@@ -401,7 +440,9 @@ function renderList() {
   const f = all.filter(x => x.username.toLowerCase().includes(kw));
   let html = `<table class="table">
   <tr>
-    <th>账号</th><th>密码</th><th>在线</th><th>激活状态</th><th>剩余换绑</th><th>创建时间</th><th>到期时间</th><th>状态</th><th>操作</th>
+    <th>账号</th><th>密码</th><th>在线</th><th>激活状态</th><th>剩余换绑</th>
+    <th>美金余额</th><th>可兑换币</th><th>汇率</th>
+    <th>创建时间</th><th>到期时间</th><th>状态</th><th>操作</th>
   </tr>`;
   for(const u of f){
     const on = u.token ? '在线' : '离线';
@@ -416,6 +457,9 @@ function renderList() {
 
     const activeTxt = u.activeTime ? '<span class="act-yes">已激活</span>' : '<span class="act-no">未激活</span>';
     const resetTimes = u.changeDeviceTimes ?? 1;
+    const usd = Number(u.usd_balance ?? 0).toFixed(2);
+    const coin = Number(u.coin_balance ?? 0).toFixed(2);
+    const rate = u.rate_text || "1 USD = 95 Coin";
 
     html += `<tr>
       <td>${u.username}</td>
@@ -423,11 +467,15 @@ function renderList() {
       <td class="${cn}">${on}</td>
       <td>${activeTxt}</td>
       <td>${resetTimes}次</td>
+      <td>$${usd}</td>
+      <td>${coin}</td>
+      <td>${rate}</td>
       <td>${new Date(u.createdAt).toLocaleString()}</td>
       <td>${exp}</td>
       <td>${u.enabled?'启用':'禁用'}</td>
       <td>
         <button class="copy-btn" onclick="copyUser('${u.username}','${u.password}')">复制</button>
+        <button class="balance-btn" onclick="showBalanceModal('${u.username}',${usd})">修改余额</button>
         <button style="padding:4px;font-size:12px" onclick="toggle('${u.username}',${!u.enabled})">
           ${u.enabled?'禁用':'启用'}
         </button>
