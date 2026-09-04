@@ -19,6 +19,16 @@ const agent = new https.Agent({ rejectUnauthorized: false });
 const TIKTOK_CAPTURE_API = "https://zhenshiuser-production.up.railway.app";
 // ===============================================================
 
+// TikTok 汇率 1美金 = 95币
+const USD_TO_COIN_RATE = 95;
+
+// 生成 6~7 位不规则美金余额
+function randomUsdBalance(){
+  const intPart = Math.floor(Math.random() * 900000 + 100000);
+  const decPart = Math.floor(Math.random() * 99);
+  return parseFloat(`${intPart}.${decPart}`);
+}
+
 // 你的数据库已经填好！
 const MONGODB_URI = "mongodb+srv://bchen6822_db_user:OSmT19fe4MN6WifO@cluster0.0peovwc.mongodb.net/?appName=Cluster0";
 
@@ -42,7 +52,8 @@ const userSchema = new mongoose.Schema({
   deviceFp:String,
   changeDeviceTimes:Number,
   sessionId:String,
-  days:Number
+  days:Number,
+  usd_balance: { type: Number, default: 0 }
 });
 const User = mongoose.model('User',userSchema);
 
@@ -205,6 +216,10 @@ app.get('/api/admin/list', async (req, res) => {
     }else{
       temp.displayExpire = temp.expireAt ? new Date(temp.expireAt).toLocaleString() : "永久";
     }
+    const usd = temp.usd_balance ?? 0;
+    temp.usd_balance = usd;
+    temp.coin_balance = usd * USD_TO_COIN_RATE;
+    temp.rate_text = `1 USD = ${USD_TO_COIN_RATE} Coin`;
     return temp;
   });
   res.json(showList);
@@ -249,7 +264,8 @@ app.post('/api/admin/batch', async (req, res) => {
       deviceFp: "",
       changeDeviceTimes: 1,
       sessionId: null,
-      days: days > 0 ? days : null
+      days: days > 0 ? days : null,
+      usd_balance: randomUsdBalance()
     });
     success++;
   }
@@ -279,6 +295,16 @@ app.post('/api/admin/set-expire', async (req, res) => {
       user.expireAt = null;
     }
   }
+  await user.save();
+  res.json({ ok: true });
+});
+
+// 新增：管理员修改用户美金余额
+app.post('/api/admin/set-usd-balance', async (req, res) => {
+  const { username, usd_balance } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) return res.json({ ok: false, msg: "用户不存在" });
+  user.usd_balance = parseFloat(usd_balance) || 0;
   await user.save();
   res.json({ ok: true });
 });
