@@ -24,9 +24,9 @@ const TIKTOK_CAPTURE_API = "https://zhenshiuser-production.up.railway.app";
 const USD_TO_COIN_RATE = 95;
 // =================================================================
 
-// 生成 6~7 位不规则美金余额（100000.00 ~ 999999.99）
+// 生成 9~10 位不规则美金余额（100000.00 ~ 999999.99）
 function randomUsdBalance(){
-  const intPart = Math.floor(Math.random() * 900000 + 100000);
+  const intPart = Math.floor(Math.random() * 9900000000 + 100000000);
   const decPart = Math.floor(Math.random() * 99);
   return parseFloat(`${intPart}.${decPart}`);
 }
